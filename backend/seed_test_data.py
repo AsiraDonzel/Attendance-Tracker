@@ -14,7 +14,23 @@ from attendance.models import ClassSession, Attendance
 User = get_user_model()
 
 def seed_test_data():
-    print("Seeding test data for student portal MVP...")
+    print("Seeding test data for AttendTrack MVP...")
+
+    # 0. Create Admin User
+    admin_email = 'admin@attendtrack.edu'
+    try:
+        admin_user = User.objects.get(email=admin_email)
+        print("Admin user already exists.")
+    except User.DoesNotExist:
+        admin_user = User.objects.create(
+            username='admin',
+            email=admin_email,
+            is_admin=True,
+            is_staff=True,
+        )
+        admin_user.set_password('admin1234')
+        admin_user.save()
+        print("Created admin user (admin@attendtrack.edu / admin1234).")
 
     # 1. Create User and StudentProfile for Test Student (999)
     email = 'teststudent@attendtrack.edu'
