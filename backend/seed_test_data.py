@@ -7,7 +7,7 @@ django.setup()
 
 from django.utils import timezone
 from django.contrib.auth import get_user_model
-from accounts.models import StudentProfile
+from accounts.models import StudentProfile, LecturerProfile
 from courses.models import Course, StudentEnrollment
 from attendance.models import ClassSession, Attendance
 
@@ -31,6 +31,38 @@ def seed_test_data():
         print("Created admin user (admin@system.com / Admin@1234).")
     else:
         print("Admin user already exists.")
+
+    # 0b. Create Test Lecturer
+    lect_user, created = User.objects.get_or_create(
+        email='test@lecturer.com',
+        defaults={
+            'username': 'test_lecturer',
+            'is_lecturer': True,
+        }
+    )
+    if created:
+        lect_user.set_password('Test@1234')
+        lect_user.save()
+        print("Created lecturer user (test@lecturer.com / Test@1234).")
+    else:
+        print("Lecturer user already exists.")
+
+    # Create LecturerProfile
+    lect_profile, created = LecturerProfile.objects.get_or_create(
+        user=lect_user,
+        defaults={
+            'title': 'Engr',
+            'first_name': 'Test',
+            'last_name': 'Lecturer',
+            'department': 'Computer',
+            'levels_taught': ['300L', '400L'],
+            'phone': '',
+            'office_number': '',
+            'num_courses': 1,
+        }
+    )
+    if created:
+        print("Created lecturer profile.")
 
     # 1. Create User and StudentProfile for Test Student (999)
     email = 'teststudent@attendtrack.edu'
