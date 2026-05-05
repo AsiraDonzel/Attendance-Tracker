@@ -18,17 +18,17 @@ def seed_test_data():
 
     # 0. Create Admin User
     admin_user, created = User.objects.get_or_create(
-        email='admin@attendtrack.edu',
+        email='admin@system.com',
         defaults={
-            'username': 'admin_attendtrack',
+            'username': 'admin_system',
             'is_admin': True,
             'is_staff': True,
         }
     )
     if created:
-        admin_user.set_password('admin1234')
+        admin_user.set_password('Admin@1234')
         admin_user.save()
-        print("Created admin user (admin@attendtrack.edu / admin1234).")
+        print("Created admin user (admin@system.com / Admin@1234).")
     else:
         print("Admin user already exists.")
 
