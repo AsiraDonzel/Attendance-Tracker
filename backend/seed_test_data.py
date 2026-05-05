@@ -17,20 +17,20 @@ def seed_test_data():
     print("Seeding test data for AttendTrack MVP...")
 
     # 0. Create Admin User
-    admin_email = 'admin@attendtrack.edu'
-    try:
-        admin_user = User.objects.get(email=admin_email)
-        print("Admin user already exists.")
-    except User.DoesNotExist:
-        admin_user = User.objects.create(
-            username='admin',
-            email=admin_email,
-            is_admin=True,
-            is_staff=True,
-        )
+    admin_user, created = User.objects.get_or_create(
+        email='admin@attendtrack.edu',
+        defaults={
+            'username': 'admin_attendtrack',
+            'is_admin': True,
+            'is_staff': True,
+        }
+    )
+    if created:
         admin_user.set_password('admin1234')
         admin_user.save()
         print("Created admin user (admin@attendtrack.edu / admin1234).")
+    else:
+        print("Admin user already exists.")
 
     # 1. Create User and StudentProfile for Test Student (999)
     email = 'teststudent@attendtrack.edu'
