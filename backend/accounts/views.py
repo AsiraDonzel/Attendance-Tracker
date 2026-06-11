@@ -114,49 +114,65 @@ def login_view(request):
 @permission_classes([AllowAny])
 def student_login(request):
     """
-    Login endpoint specifically for students via Fingerprint and hardware OTP.
-    Test account: fingerprint_id=999, otp=482391
+    Login endpoint for students via fingerprint ID + hardware TOTP OTP.
+
+    The Arduino device:
+      1. Verifies the student's fingerprint.
+      2. Computes a 6-digit TOTP using the shared secret stored in EEPROM.
+      3. Displays the OTP on the LCD.
+    The student then enters this OTP here together with their fingerprint ID.
+
+    Test account (seed data, no hardware required):
+      fingerprint_id = 999, otp = 482391
     """
+    from attendance.totp_utils import verify_otp  # avoid circular import at module level
+
     fingerprint_id = request.data.get('fingerprint_id')
     otp = request.data.get('otp')
 
     if not fingerprint_id or not otp:
-        return Response({'error': 'Fingerprint ID and OTP are required.'}, status=status.HTTP_400_BAD_REQUEST)
-    
+        return Response(
+            {'error': 'Fingerprint ID and OTP are required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     try:
         fingerprint_id = int(fingerprint_id)
-    except ValueError:
-        return Response({'error': 'Fingerprint ID must be an integer.'}, status=status.HTTP_400_BAD_REQUEST)
+    except (ValueError, TypeError):
+        return Response(
+            {'error': 'Fingerprint ID must be an integer.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-    # Check for test student
-    if fingerprint_id == 999 and str(otp) == '482391':
-        try:
-            student_profile = StudentProfile.objects.get(fingerprint_id=999)
-            user = student_profile.user
-            
-            # Generate token
-            refresh = RefreshToken.for_user(user)
+    # Verify OTP (handles test stub and real TOTP via pyotp)
+    is_valid, error_msg = verify_otp(fingerprint_id, str(otp))
+    if not is_valid:
+        return Response({'error': error_msg}, status=status.HTTP_401_UNAUTHORIZED)
 
-            from system_logs.models import SystemLog
-            SystemLog.objects.create(user=user, action=f'Student logged in: {user.email}')
-
-            return Response({
-                'message': 'Login successful.',
-                'access': str(refresh.access_token),
-                'refresh': str(refresh),
-                'user': UserProfileSerializer(user).data,
-            })
-        except StudentProfile.DoesNotExist:
-            return Response({'error': 'Test student not found. Please run the seed script.'}, status=status.HTTP_404_NOT_FOUND)
-            
-    # For any other ID
+    # OTP accepted — find and authenticate the student
     try:
-        StudentProfile.objects.get(fingerprint_id=fingerprint_id)
-        return Response({
-            'error': 'OTP verification pending hardware integration. Use test ID 999 with code 482391.'
-        }, status=status.HTTP_501_NOT_IMPLEMENTED)
+        student_profile = StudentProfile.objects.get(fingerprint_id=fingerprint_id)
     except StudentProfile.DoesNotExist:
-        return Response({'error': 'Fingerprint ID not recognized.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {'error': 'Fingerprint ID not recognised.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    user = student_profile.user
+    refresh = RefreshToken.for_user(user)
+
+    from system_logs.models import SystemLog
+    SystemLog.objects.create(
+        user=user,
+        action=f'Student logged in via OTP: fingerprint_id={fingerprint_id}',
+    )
+
+    return Response({
+        'message': 'Login successful.',
+        'access': str(refresh.access_token),
+        'refresh': str(refresh),
+        'user': UserProfileSerializer(user).data,
+    })
 
 
 @api_view(['GET'])
