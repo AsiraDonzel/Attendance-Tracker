@@ -155,9 +155,11 @@ void     markAttendance();
 void     deleteFinger();
 uint8_t  readID(const char* prompt);
 void     feedback(bool ok);
-void     lcdMsg(const char* line0, const char* line1 = "");
+// Two-line flash-string LCD helper
 void     lcdMsgP(const __FlashStringHelper* line0,
-                 const __FlashStringHelper* line1 = F(""));
+                 const __FlashStringHelper* line1);
+// Single-line convenience overload (line 2 left blank)
+void     lcdMsgP(const __FlashStringHelper* line0);
 String   toBase32(const uint8_t* data, int len);
 unsigned long getUnixTime();
 void     runI2CScanner();
@@ -673,23 +675,26 @@ void waitForNoFinger() {
 // ============================================================
 //  LCD HELPERS
 // ============================================================
-void lcdMsg(const char* line0, const char* line1) {
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print(line0);
-    if (line1 && line1[0]) {
-        lcd.setCursor(0, 1);
-        lcd.print(line1);
-    }
-}
 
+// Two-line version: both lines supplied by caller
 void lcdMsgP(const __FlashStringHelper* line0,
              const __FlashStringHelper* line1) {
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print(line0);
+    if (line1) {
+        lcd.setCursor(0, 1);
+        lcd.print(line1);
+    }
+}
+
+// Single-line convenience: clears line 2
+void lcdMsgP(const __FlashStringHelper* line0) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print(line0);
     lcd.setCursor(0, 1);
-    lcd.print(line1);
+    lcd.print(F(""));
 }
 
 // ============================================================
