@@ -164,7 +164,8 @@ String   toBase32(const uint8_t* data, int len);
 unsigned long getUnixTime();
 void     runI2CScanner();
 void     waitForNoFinger();
-bool     waitForFinger(uint16_t timeoutMs);
+// Returns: 1=finger ready, 0=timeout/error, -1=C pressed (cancel/home)
+int      waitForFinger(uint16_t timeoutMs);
 
 // ============================================================
 //  SETUP
@@ -255,9 +256,10 @@ void loop() {
     if (!key) return;
 
     switch (key) {
-        case 'A': enrollFinger();  showMenu(); break;
+        case 'A': enrollFinger();   showMenu(); break;
         case 'B': markAttendance(); showMenu(); break;
-        case 'D': deleteFinger();  showMenu(); break;
+        case 'C': showMenu(); break;            // C = go home from anywhere
+        case 'D': deleteFinger();   showMenu(); break;
         default: break;
     }
 }
@@ -293,11 +295,15 @@ void enrollFinger() {
     lcd.print(F("ID: "));
     lcd.print(id);
 
-    if (!waitForFinger(15000)) {
-        lcdMsgP(F("Timeout"), F("No finger placed"));
-        feedback(false);
-        delay(1500);
-        return;
+    {
+        int fp = waitForFinger(15000);
+        if (fp == -1) return;           // C pressed — go home
+        if (fp == 0) {
+            lcdMsgP(F("Timeout"), F("No finger placed"));
+            feedback(false);
+            delay(1500);
+            return;
+        }
     }
 
     int p = finger.image2Tz(1);
@@ -321,11 +327,15 @@ void enrollFinger() {
     lcd.setCursor(0, 1);
     lcd.print(F("Confirm finger"));
 
-    if (!waitForFinger(15000)) {
-        lcdMsgP(F("Timeout"), F("Enrol aborted"));
-        feedback(false);
-        delay(1500);
-        return;
+    {
+        int fp = waitForFinger(15000);
+        if (fp == -1) return;           // C pressed — go home
+        if (fp == 0) {
+            lcdMsgP(F("Timeout"), F("Enrol aborted"));
+            feedback(false);
+            delay(1500);
+            return;
+        }
     }
 
     p = finger.image2Tz(2);
@@ -402,116 +412,131 @@ void enrollFinger() {
 //  MARK ATTENDANCE
 // ============================================================
 void markAttendance() {
-    uint8_t id = readID("Your ID (1-127)");
-    if (id == 0) {
-        lcdMsgP(F("Cancelled"));
-        delay(1000);
-        return;
-    }
+    /*
+     * Retry loop — iterates on every wrong-finger or timeout.
+     * Exits:  break  on success (OTP shown).
+     *         return when id==0 (C pressed in readID) or
+     *                when C is pressed while waiting for finger.
+     */
+    while (true) {
 
-    // --- Prompt for finger ---
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.write(byte(1));   // fingerprint icon
-    lcd.print(F(" Scan Finger"));
-    lcd.setCursor(0, 1);
-    lcd.print(F("ID: "));
-    lcd.print(id);
+        // --- Get student ID ---
+        uint8_t id = readID("Your ID (1-127)");
+        if (id == 0) {
+            // C pressed during ID entry or empty # pressed
+            lcdMsgP(F("Cancelled"));
+            delay(800);
+            return;
+        }
 
-    if (!waitForFinger(10000)) {
-        lcdMsgP(F("Timeout"), F("No finger placed"));
-        feedback(false);
-        delay(1500);
-        return;
-    }
-
-    // --- Convert image ---
-    int p = finger.image2Tz(1);
-    if (p != FINGERPRINT_OK) {
-        lcdMsgP(F("Image Error"), F("Try again"));
-        feedback(false);
-        delay(1500);
-        return;
-    }
-
-    // --- Search against ALL stored templates ---
-    p = finger.fingerSearch();
-
-    if (p != FINGERPRINT_OK) {
-        // Not matched to ANY stored finger
-        lcdMsgP(F("No Match Found"), F("Access Denied"));
-        feedback(false);
-        delay(2000);
-        return;
-    }
-
-    // finger.fingerID  = matched slot
-    // finger.confidence = match confidence score
-
-    // --- Verify matched slot equals the ID the student entered ---
-    if (finger.fingerID != id) {
+        // --- Prompt for finger (hint: C cancels) ---
         lcd.clear();
         lcd.setCursor(0, 0);
-        lcd.print(F("Wrong Finger!"));
+        lcd.write(byte(1));   // fingerprint icon
+        lcd.print(F(" Scan Finger"));
         lcd.setCursor(0, 1);
-        lcd.print(F("Matched ID:"));
-        lcd.print(finger.fingerID);
-        feedback(false);
-        delay(2500);
-        return;
-    }
+        lcd.print(F("C:Home  ID:"));
+        lcd.print(id);
 
-    // --- Read secret from EEPROM ---
-    uint8_t secret[SECRET_LEN];
-    int addr = EEPROM_DATA_START + (id * SECRET_LEN);
-    bool secretEmpty = true;
-    for (int i = 0; i < SECRET_LEN; i++) {
-        secret[i] = EEPROM.read(addr + i);
-        if (secret[i] != 0x00) secretEmpty = false;
-    }
+        int fp = waitForFinger(10000);
+        if (fp == -1) return;        // C pressed — exit to menu
+        if (fp == 0) {
+            lcdMsgP(F("Timeout"), F("No finger placed"));
+            feedback(false);
+            delay(1500);
+            continue;                // loop — ask for ID again
+        }
 
-    if (secretEmpty) {
-        lcdMsgP(F("No Secret Found"), F("Re-enrol needed"));
-        feedback(false);
-        delay(2500);
-        return;
-    }
+        // --- Convert image ---
+        int p = finger.image2Tz(1);
+        if (p != FINGERPRINT_OK) {
+            lcdMsgP(F("Image Error"), F("Try again"));
+            feedback(false);
+            delay(1200);
+            continue;                // loop
+        }
 
-    // --- Generate TOTP ---
-    TOTP totp(secret, SECRET_LEN);
-    unsigned long unix_t = getUnixTime();
-    uint32_t code = totp.getCode(unix_t);
+        // --- Search all stored templates ---
+        p = finger.fingerSearch();
+        if (p != FINGERPRINT_OK) {
+            lcdMsgP(F("No Match Found"), F("Access Denied"));
+            feedback(false);
+            delay(2000);
+            continue;                // loop — ask for ID again
+        }
 
-    // --- Display OTP ---
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.write(byte(2));   // tick icon
-    lcd.print(F(" ID:"));
-    lcd.print(id);
-    lcd.print(F(" OK"));
-    lcd.setCursor(0, 1);
-    lcd.print(F("OTP: "));
-    // Always print 6 digits (zero-padded)
-    if (code < 100000) lcd.print('0');
-    lcd.print(code);
+        // finger.fingerID  = matched slot
+        // finger.confidence = match score
 
-    // Also send over Serial for debugging
-    Serial.print(F("Attendance OTP for ID "));
-    Serial.print(id);
-    Serial.print(F(": "));
-    if (code < 100000) Serial.print('0');
-    Serial.println(code);
-    Serial.print(F("Unix time used: "));
-    Serial.println(unix_t);
+        // --- Verify matched slot = ID the student entered ---
+        if (finger.fingerID != id) {
+            // Wrong finger placed for this ID — prompt retry without
+            // returning to the main menu
+            lcd.clear();
+            lcd.setCursor(0, 0);
+            lcd.print(F("Wrong Finger!"));
+            lcd.setCursor(0, 1);
+            lcd.print(F("Matched: ID "));
+            lcd.print(finger.fingerID);
+            feedback(false);
+            delay(2000);
+            lcdMsgP(F("Try Again"), F("Re-enter your ID"));
+            delay(1500);
+            continue;                // loop — re-enter ID and scan again
+        }
 
-    feedback(true);
+        // --- Read TOTP secret from EEPROM ---
+        uint8_t secret[SECRET_LEN];
+        int addr = EEPROM_DATA_START + (id * SECRET_LEN);
+        bool secretEmpty = true;
+        for (int i = 0; i < SECRET_LEN; i++) {
+            secret[i] = EEPROM.read(addr + i);
+            if (secret[i] != 0x00) secretEmpty = false;
+        }
 
-    // Hold OTP on screen for 10 seconds with a countdown in line 0
-    for (int countdown = 10; countdown >= 0; countdown--) {
-        lcd.setCursor(13, 0);
-        lcd.print(countdown);
-        if (countdown < 10) lcd.print(' ');
-        delay(1000);
+        if (secretEmpty) {
+            lcdMsgP(F("No Secret Found"), F("Re-enrol needed"));
+            feedback(false);
+            delay(2500);
+            return;                  // fatal — must re-enrol, exit to menu
+        }
+
+        // --- Generate TOTP ---
+        TOTP totp(secret, SECRET_LEN);
+        unsigned long unix_t = getUnixTime();
+        uint32_t code = totp.getCode(unix_t);
+
+        // --- Display OTP ---
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.write(byte(2));          // tick icon
+        lcd.print(F(" ID:"));
+        lcd.print(id);
+        lcd.print(F(" OK"));
+        lcd.setCursor(0, 1);
+        lcd.print(F("OTP: "));
+        if (code < 100000) lcd.print('0');  // always 6 digits
+        lcd.print(code);
+
+        // Serial debug output
+        Serial.print(F("Attendance OTP for ID "));
+        Serial.print(id);
+        Serial.print(F(": "));
+        if (code < 100000) Serial.print('0');
+        Serial.println(code);
+        Serial.print(F("Unix time: "));
+        Serial.println(unix_t);
+
+        feedback(true);
+
+        // Countdown 10 s — OTP stays visible
+        for (int countdown = 10; countdown >= 0; countdown--) {
+            lcd.setCursor(13, 0);
+            lcd.print(countdown);
+            if (countdown < 10) lcd.print(' ');
+            delay(1000);
+        }
+        break;   // success — exit retry loop, return to menu
     }
 }
 
@@ -651,18 +676,24 @@ void feedback(bool ok) {
 }
 
 // ============================================================
-//  WAIT FOR FINGER (blocks up to timeoutMs; returns true=got image)
+//  WAIT FOR FINGER
+//  Returns: 1 = image ready
+//           0 = timeout or sensor error
+//          -1 = C key pressed (cancel / go home)
 // ============================================================
-bool waitForFinger(uint16_t timeoutMs) {
+int waitForFinger(uint16_t timeoutMs) {
     unsigned long start = millis();
     while (millis() - start < timeoutMs) {
+        // Check keypad every iteration so C is never missed
+        char key = keypad.getKey();
+        if (key == 'C') return -1;   // user wants to go home
+
         int p = finger.getImage();
-        if (p == FINGERPRINT_OK) return true;
+        if (p == FINGERPRINT_OK)     return 1;
         if (p == FINGERPRINT_NOFINGER) continue;
-        // Any other error (communication, etc.)
-        return false;
+        return 0;                    // sensor error
     }
-    return false;
+    return 0;                        // timeout
 }
 
 // ============================================================
