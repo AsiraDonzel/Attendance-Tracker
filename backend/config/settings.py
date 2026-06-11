@@ -80,28 +80,46 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # --------------------------------------------------------------------------
 # Database
 # --------------------------------------------------------------------------
-# PostgreSQL is the target database. Set environment variables to configure.
-# Falls back to SQLite for local development if DB_NAME is not set.
+# Priority order:
+#   1. DATABASE_URL  — single env var (paste the Internal URL from Render).
+#                      Simplest and most reliable for production.
+#   2. DB_NAME etc.  — individual env vars (legacy / manual override).
+#   3. SQLite        — local development fallback.
 
-DB_NAME = os.environ.get('DB_NAME')
+DATABASE_URL = os.environ.get('DATABASE_URL')
+DB_NAME      = os.environ.get('DB_NAME')
 
-if DB_NAME:
+if DATABASE_URL:
+    # Parse postgresql://user:password@host:port/dbname
+    import urllib.parse as _urlparse
+    _url = _urlparse.urlparse(DATABASE_URL)
     DATABASES = {
         'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': DB_NAME,
-            'USER': os.environ.get('DB_USER', 'postgres'),
+            'ENGINE':   'django.db.backends.postgresql',
+            'NAME':     _url.path.lstrip('/'),
+            'USER':     _url.username,
+            'PASSWORD': _url.password,
+            'HOST':     _url.hostname,
+            'PORT':     str(_url.port or 5432),
+        }
+    }
+elif DB_NAME:
+    DATABASES = {
+        'default': {
+            'ENGINE':   'django.db.backends.postgresql',
+            'NAME':     DB_NAME,
+            'USER':     os.environ.get('DB_USER', 'postgres'),
             'PASSWORD': os.environ.get('DB_PASSWORD', ''),
-            'HOST': os.environ.get('DB_HOST', 'localhost'),
-            'PORT': os.environ.get('DB_PORT', '5432'),
+            'HOST':     os.environ.get('DB_HOST', 'localhost'),
+            'PORT':     os.environ.get('DB_PORT', '5432'),
         }
     }
 else:
-    # Fallback to SQLite for development
+    # Fallback to SQLite for local development
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+            'NAME':   BASE_DIR / 'db.sqlite3',
         }
     }
 
