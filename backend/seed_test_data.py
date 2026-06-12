@@ -23,6 +23,7 @@ def seed_test_data():
             'username': 'admin_system',
             'is_admin': True,
             'is_staff': True,
+            'is_superuser': True,   # required for full Django Admin access
         }
     )
     if created:
@@ -30,6 +31,11 @@ def seed_test_data():
         admin_user.save()
         print("Created admin user (admin@system.com / Admin@1234).")
     else:
+        # Ensure existing admin always has superuser flag (fixes fresh PG DB)
+        if not admin_user.is_superuser or not admin_user.is_staff:
+            admin_user.is_superuser = True
+            admin_user.is_staff = True
+            admin_user.save(update_fields=['is_superuser', 'is_staff'])
         print("Admin user already exists.")
 
     # 0b. Create Test Lecturer
