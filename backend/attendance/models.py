@@ -7,7 +7,6 @@ from courses.models import Course
 
 
 class ClassSession(models.Model):
-    """A scheduled class session for a course."""
     course = models.ForeignKey(
         Course, on_delete=models.CASCADE, related_name='sessions'
     )
@@ -31,7 +30,6 @@ class ClassSession(models.Model):
 
 
 class Attendance(models.Model):
-    """Attendance record for a student in a class session."""
     STATUS_CHOICES = [
         ('present', 'Present'),
         ('absent', 'Absent'),
@@ -56,10 +54,6 @@ class Attendance(models.Model):
 
 
 class CourseTimetable(models.Model):
-    """
-    Recurring weekly schedule slot for a course.
-    The admin sets day/time and semester dates; sessions are auto-generated.
-    """
     DAY_CHOICES = [
         (0, 'Monday'),
         (1, 'Tuesday'),

@@ -2,6 +2,7 @@
 Serializers for authentication and user management.
 """
 import re
+from django.db import transaction
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import StudentProfile, LecturerProfile
@@ -23,14 +24,18 @@ class StudentSignupSerializer(serializers.Serializer):
     fingerprint_id = serializers.IntegerField()
 
     def validate_email(self, value):
-        if User.objects.filter(email=value).exists():
+        val = value.strip().lower()
+        if User.objects.filter(email=val).exists():
             raise serializers.ValidationError('A user with this email already exists.')
-        return value
+        return val
 
     def validate_matric_number(self, value):
-        if StudentProfile.objects.filter(matric_number=value).exists():
+        val = value.strip().upper()
+        if StudentProfile.objects.filter(matric_number=val).exists():
             raise serializers.ValidationError('This matric number is already registered.')
-        return value
+        if User.objects.filter(username=val).exists():
+            raise serializers.ValidationError('A user with this matric number already exists.')
+        return val
 
     def validate_fingerprint_id(self, value):
         if StudentProfile.objects.filter(fingerprint_id=value).exists():
@@ -38,26 +43,27 @@ class StudentSignupSerializer(serializers.Serializer):
         return value
 
     def create(self, validated_data):
-        # Create user (no password for students)
-        user = User.objects.create_user(
-            username=validated_data['matric_number'],
-            email=validated_data['email'],
-            is_student=True,
-        )
-        user.set_unusable_password()
-        user.save()
+        with transaction.atomic():
+            # Create user (no password for students)
+            user = User.objects.create_user(
+                username=validated_data['matric_number'],
+                email=validated_data['email'],
+                is_student=True,
+            )
+            user.set_unusable_password()
+            user.save()
 
-        # Create student profile
-        profile = StudentProfile.objects.create(
-            user=user,
-            full_name=validated_data['full_name'],
-            matric_number=validated_data['matric_number'],
-            level=validated_data['level'],
-            department=validated_data['department'],
-            fingerprint_id=validated_data['fingerprint_id'],
-            totp_secret='',  # Will be set when hardware is ready
-        )
-        return profile
+            # Create student profile
+            profile = StudentProfile.objects.create(
+                user=user,
+                full_name=validated_data['full_name'],
+                matric_number=validated_data['matric_number'],
+                level=validated_data['level'],
+                department=validated_data['department'],
+                fingerprint_id=validated_data['fingerprint_id'],
+                totp_secret='',  # Will be set when hardware is ready
+            )
+            return profile
 
 
 class LecturerSignupSerializer(serializers.Serializer):
@@ -81,9 +87,10 @@ class LecturerSignupSerializer(serializers.Serializer):
     )
 
     def validate_email(self, value):
-        if User.objects.filter(email=value).exists():
+        val = value.strip().lower()
+        if User.objects.filter(email=val).exists():
             raise serializers.ValidationError('A user with this email already exists.')
-        return value
+        return val
 
     def validate_password(self, value):
         if not re.search(r'[A-Z]', value):
@@ -106,38 +113,39 @@ class LecturerSignupSerializer(serializers.Serializer):
         validated_data.pop('confirm_password')
         password = validated_data.pop('password')
 
-        user = User.objects.create_user(
-            username=validated_data['email'],
-            email=validated_data['email'],
-            password=password,
-            is_lecturer=True,
-        )
+        with transaction.atomic():
+            user = User.objects.create_user(
+                username=validated_data['email'],
+                email=validated_data['email'],
+                password=password,
+                is_lecturer=True,
+            )
 
-        profile = LecturerProfile.objects.create(
-            user=user,
-            title=validated_data['title'],
-            first_name=validated_data['first_name'],
-            last_name=validated_data['last_name'],
-            department=validated_data['department'],
-            levels_taught=validated_data['levels_taught'],
-            phone=validated_data.get('phone', ''),
-            office_number=validated_data.get('office_number', ''),
-            num_courses=validated_data['num_courses'],
-        )
+            profile = LecturerProfile.objects.create(
+                user=user,
+                title=validated_data['title'],
+                first_name=validated_data['first_name'],
+                last_name=validated_data['last_name'],
+                department=validated_data['department'],
+                levels_taught=validated_data['levels_taught'],
+                phone=validated_data.get('phone', ''),
+                office_number=validated_data.get('office_number', ''),
+                num_courses=validated_data['num_courses'],
+            )
 
-        # Assign selected courses
-        if selected_courses:
-            from courses.models import LecturerAssignment, Course
-            for course_id in selected_courses:
-                try:
-                    course = Course.objects.get(id=course_id)
-                    LecturerAssignment.objects.get_or_create(
-                        lecturer=profile, course=course
-                    )
-                except Course.DoesNotExist:
-                    pass
+            # Assign selected courses
+            if selected_courses:
+                from courses.models import LecturerAssignment, Course
+                for course_id in selected_courses:
+                    try:
+                        course = Course.objects.get(id=course_id)
+                        LecturerAssignment.objects.get_or_create(
+                            lecturer=profile, course=course
+                        )
+                    except Course.DoesNotExist:
+                        pass
 
-        return profile
+            return profile
 
 
 class LoginSerializer(serializers.Serializer):
