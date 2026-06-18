@@ -551,44 +551,167 @@ function LecturerSignup({ onBack }) {
               </>
             )}
 
-            {step === 3 && (
-              <>
-                <h3 style={{ marginBottom: '8px' }}>Select Courses</h3>
-                <p className="text-muted" style={{ marginBottom: '16px', fontSize: '0.85rem' }}>
-                  Choose the courses you will be teaching. These are filtered by your department and levels.
-                </p>
+            {step === 3 && (() => {
+              // Group courses by level, preserving 100L→500L order
+              const LEVEL_ORDER = ['100L','200L','300L','400L','500L'];
+              const LEVEL_COLORS = {
+                '100L': { bg: '#eff6ff', border: '#3b82f6', badge: '#2563eb', text: '#1d4ed8' },
+                '200L': { bg: '#f0fdf4', border: '#22c55e', badge: '#16a34a', text: '#15803d' },
+                '300L': { bg: '#fff7ed', border: '#f97316', badge: '#ea580c', text: '#c2410c' },
+                '400L': { bg: '#faf5ff', border: '#a855f7', badge: '#9333ea', text: '#7e22ce' },
+                '500L': { bg: '#fff1f2', border: '#f43f5e', badge: '#e11d48', text: '#be123c' },
+              };
+              const grouped = {};
+              for (const c of courses) {
+                if (!grouped[c.level]) grouped[c.level] = [];
+                grouped[c.level].push(c);
+              }
+              const presentLevels = LEVEL_ORDER.filter(l => grouped[l]);
 
-                {courses.length === 0 ? (
-                  <div className="empty-state" style={{ padding: '32px' }}>
-                    <p>No courses found for your department and levels. Courses can be added by the admin.</p>
+              const toggleAll = (level) => {
+                const ids = grouped[level].map(c => c.id);
+                const allSelected = ids.every(id => form.selected_courses.includes(id));
+                setForm(prev => ({
+                  ...prev,
+                  selected_courses: allSelected
+                    ? prev.selected_courses.filter(id => !ids.includes(id))
+                    : [...new Set([...prev.selected_courses, ...ids])]
+                }));
+              };
+
+              return (
+                <>
+                  <div style={{ marginBottom: '16px' }}>
+                    <h3 style={{ margin: '0 0 4px', fontSize: '1rem', fontWeight: 700 }}>Select Courses</h3>
+                    <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                      Courses are filtered by your department and selected levels.
+                      Click a level header to select/deselect all courses in that level.
+                    </p>
                   </div>
-                ) : (
-                  <div style={{ maxHeight: '300px', overflow: 'auto', marginBottom: '16px' }}>
-                    {courses.map(course => (
-                      <label key={course.id}
-                        className={`checkbox-label ${form.selected_courses.includes(course.id) ? 'checked' : ''}`}
-                        style={{ display: 'flex', marginBottom: '8px', width: '100%' }}>
-                        <input type="checkbox" checked={form.selected_courses.includes(course.id)}
-                          onChange={() => toggleCourse(course.id)} />
-                        <div>
-                          <strong>{course.code}</strong> - {course.title}
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                            {course.level} | {course.credits} credits
+
+                  {courses.length === 0 ? (
+                    <div className="empty-state" style={{ padding: '32px', textAlign: 'center' }}>
+                      <p style={{ color: 'var(--text-muted)' }}>
+                        No courses found for your department and levels.<br />
+                        Courses can be added by the admin.
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ maxHeight: '380px', overflowY: 'auto', marginBottom: '16px', paddingRight: '2px' }}>
+                      {presentLevels.map(level => {
+                        const col = LEVEL_COLORS[level];
+                        const levelCourses = grouped[level];
+                        const allSelected = levelCourses.every(c => form.selected_courses.includes(c.id));
+                        const someSelected = levelCourses.some(c => form.selected_courses.includes(c.id));
+
+                        return (
+                          <div key={level} style={{ marginBottom: '18px' }}>
+                            {/* Level header — click to toggle all */}
+                            <button
+                              type="button"
+                              onClick={() => toggleAll(level)}
+                              style={{
+                                width: '100%', display: 'flex', alignItems: 'center',
+                                justifyContent: 'space-between', padding: '8px 14px',
+                                background: col.bg, border: `1.5px solid ${col.border}`,
+                                borderRadius: '10px', cursor: 'pointer', marginBottom: '8px',
+                                transition: 'opacity 0.15s',
+                              }}
+                            >
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{
+                                  background: col.badge, color: '#fff',
+                                  fontSize: '0.72rem', fontWeight: 700, padding: '2px 9px',
+                                  borderRadius: '20px', letterSpacing: '0.03em',
+                                }}>{level}</span>
+                                <span style={{ fontSize: '0.82rem', color: col.text, fontWeight: 600 }}>
+                                  {levelCourses.length} course{levelCourses.length !== 1 ? 's' : ''}
+                                </span>
+                              </span>
+                              <span style={{ fontSize: '0.75rem', color: col.text, fontWeight: 500 }}>
+                                {allSelected ? '✓ All selected' : someSelected ? 'Partial' : 'Select all'}
+                              </span>
+                            </button>
+
+                            {/* Course cards */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {levelCourses.map(course => {
+                                const selected = form.selected_courses.includes(course.id);
+                                return (
+                                  <label
+                                    key={course.id}
+                                    style={{
+                                      display: 'flex', alignItems: 'center', gap: '12px',
+                                      padding: '10px 14px', borderRadius: '8px', cursor: 'pointer',
+                                      border: selected ? `1.5px solid ${col.border}` : '1.5px solid var(--border)',
+                                      background: selected ? col.bg : 'var(--bg-card, #fff)',
+                                      transition: 'all 0.15s',
+                                    }}
+                                  >
+                                    {/* Custom checkbox */}
+                                    <span style={{
+                                      width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
+                                      border: selected ? `2px solid ${col.badge}` : '2px solid var(--border)',
+                                      background: selected ? col.badge : 'transparent',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      transition: 'all 0.15s',
+                                    }}>
+                                      {selected && (
+                                        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                                          <path d="M1 4L3.5 6.5L9 1" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                        </svg>
+                                      )}
+                                    </span>
+                                    <input
+                                      type="checkbox"
+                                      style={{ display: 'none' }}
+                                      checked={selected}
+                                      onChange={() => toggleCourse(course.id)}
+                                    />
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontWeight: 600, fontSize: '0.88rem', display: 'flex', gap: '6px', alignItems: 'baseline' }}>
+                                        <code style={{ fontSize: '0.8rem', color: col.text, background: col.bg, padding: '1px 5px', borderRadius: '4px' }}>
+                                          {course.code}
+                                        </code>
+                                        <span style={{ color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                          {course.title}
+                                        </span>
+                                      </div>
+                                      <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                        {course.credits} credit{course.credits !== 1 ? 's' : ''}
+                                      </div>
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                )}
+                        );
+                      })}
+                    </div>
+                  )}
 
-                <div className="btn-group">
-                  <button className="btn btn-secondary" onClick={() => setStep(2)}>Back</button>
-                  <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleSubmit} disabled={loading}>
-                    {loading ? 'Registering...' : 'Complete Registration'}
-                  </button>
-                </div>
-              </>
-            )}
+                  {/* Selected count summary */}
+                  {form.selected_courses.length > 0 && (
+                    <div style={{
+                      fontSize: '0.82rem', color: 'var(--primary)', fontWeight: 500,
+                      padding: '6px 12px', background: 'var(--primary-light, #eff6ff)',
+                      borderRadius: '8px', marginBottom: '12px', textAlign: 'center',
+                    }}>
+                      {form.selected_courses.length} course{form.selected_courses.length !== 1 ? 's' : ''} selected
+                    </div>
+                  )}
+
+                  <div className="btn-group">
+                    <button className="btn btn-secondary" onClick={() => setStep(2)}>Back</button>
+                    <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleSubmit} disabled={loading}>
+                      {loading ? 'Registering...' : 'Complete Registration'}
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+
 
             <div style={{ textAlign: 'center', marginTop: '16px', display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <button className="btn btn-ghost btn-sm" onClick={onBack}>

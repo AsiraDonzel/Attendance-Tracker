@@ -78,8 +78,8 @@ class LecturerSignupSerializer(serializers.Serializer):
     num_courses = serializers.IntegerField(min_value=1, max_value=20)
     # Step 2 - Contact & Password
     email = serializers.EmailField()
-    phone = serializers.CharField(max_length=20, required=False, default='')
-    office_number = serializers.CharField(max_length=20, required=False, default='')
+    phone = serializers.CharField(max_length=20, required=False, default='', allow_blank=True)
+    office_number = serializers.CharField(max_length=20, required=False, default='', allow_blank=True)
     password = serializers.CharField(min_length=8, write_only=True)
     confirm_password = serializers.CharField(write_only=True)
     # Step 3 - Selected courses (list of course IDs)
