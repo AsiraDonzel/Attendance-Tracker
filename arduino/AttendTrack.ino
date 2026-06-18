@@ -504,7 +504,10 @@ void markAttendance() {
         // --- Generate TOTP ---
         TOTP totp(secret, SECRET_LEN);
         unsigned long unix_t = getUnixTime();
-        uint32_t code = totp.getCode(unix_t);
+        // getCode() returns a char* pointing to a zero-padded 6-digit string
+        // e.g. "048291". Do NOT store in uint32_t — that captures the pointer
+        // address, not the OTP value.
+        char* codeStr = totp.getCode(unix_t);
 
         // --- Display OTP ---
         lcd.clear();
@@ -515,15 +518,13 @@ void markAttendance() {
         lcd.print(F(" OK"));
         lcd.setCursor(0, 1);
         lcd.print(F("OTP: "));
-        if (code < 100000) lcd.print('0');  // always 6 digits
-        lcd.print(code);
+        lcd.print(codeStr);          // already exactly 6 digits, e.g. "048291"
 
         // Serial debug output
         Serial.print(F("Attendance OTP for ID "));
         Serial.print(id);
         Serial.print(F(": "));
-        if (code < 100000) Serial.print('0');
-        Serial.println(code);
+        Serial.println(codeStr);
         Serial.print(F("Unix time: "));
         Serial.println(unix_t);
 
