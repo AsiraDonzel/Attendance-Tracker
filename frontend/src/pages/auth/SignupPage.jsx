@@ -131,6 +131,7 @@ function StudentSignup({ onBack }) {
     email: '',
     phone: '',
     fingerprint_id: '',
+    totp_secret: '',
   });
 
   const update = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
@@ -142,6 +143,7 @@ function StudentSignup({ onBack }) {
       await api.post('/auth/signup/student/', {
         ...form,
         fingerprint_id: parseInt(form.fingerprint_id, 10),
+        totp_secret: form.totp_secret.trim().toUpperCase(),
       });
       setSuccess(true);
     } catch (err) {
@@ -270,17 +272,57 @@ function StudentSignup({ onBack }) {
 
             {step === 3 && (
               <>
+                {/* ── Fingerprint ID ── */}
                 <div className="form-group">
                   <label className="form-label">Fingerprint ID</label>
-                  <input className="form-input" type="number" placeholder="e.g. 5" value={form.fingerprint_id}
-                    onChange={(e) => update('fingerprint_id', e.target.value)} required />
+                  <input
+                    className="form-input"
+                    type="number"
+                    placeholder="e.g. 5"
+                    value={form.fingerprint_id}
+                    onChange={(e) => update('fingerprint_id', e.target.value)}
+                    required
+                  />
                   <div className="form-hint">
-                    Your fingerprint ID on the Arduino device. Ask your administrator if unsure.
+                    The slot number entered on the Arduino keypad during enrolment (1–127).
+                    Ask your administrator if unsure.
                   </div>
                 </div>
+
+                {/* ── TOTP Secret ── */}
+                <div className="form-group">
+                  <label className="form-label">
+                    TOTP Secret Key
+                    <span style={{
+                      marginLeft: '8px', fontSize: '0.72rem', fontWeight: 400,
+                      padding: '2px 7px', borderRadius: '20px',
+                      background: 'var(--primary-light, #e8f4fd)',
+                      color: 'var(--primary, #3b82f6)'
+                    }}>Optional</span>
+                  </label>
+                  <input
+                    className="form-input"
+                    type="text"
+                    placeholder="e.g. JBSWY3DPEHPK3PXP"
+                    value={form.totp_secret}
+                    onChange={(e) => update('totp_secret', e.target.value.toUpperCase())}
+                    style={{ fontFamily: 'monospace', letterSpacing: '0.05em' }}
+                  />
+                  <div className="form-hint">
+                    The Base32 secret printed on the Serial Monitor after fingerprint enrolment
+                    (e.g. <code style={{ fontSize: '0.78rem' }}>JBSWY3DPEHPK3PXP</code>).
+                    Leave blank if your admin will add it later.
+                  </div>
+                </div>
+
                 <div className="btn-group">
                   <button className="btn btn-secondary" onClick={() => setStep(2)}>Back</button>
-                  <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleSubmit} disabled={loading || !form.fingerprint_id}>
+                  <button
+                    className="btn btn-primary"
+                    style={{ flex: 1 }}
+                    onClick={handleSubmit}
+                    disabled={loading || !form.fingerprint_id}
+                  >
                     {loading ? 'Registering...' : 'Complete Registration'}
                   </button>
                 </div>

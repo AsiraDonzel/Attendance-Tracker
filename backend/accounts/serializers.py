@@ -20,8 +20,10 @@ class StudentSignupSerializer(serializers.Serializer):
     # Step 2 - Contact
     email = serializers.EmailField()
     phone = serializers.CharField(max_length=20, required=False, default='')
-    # Step 3 - Fingerprint
+    # Step 3 - Fingerprint & Hardware
     fingerprint_id = serializers.IntegerField()
+    totp_secret = serializers.CharField(max_length=64, required=False, default='',
+                                        allow_blank=True)
 
     def validate_email(self, value):
         val = value.strip().lower()
@@ -53,7 +55,6 @@ class StudentSignupSerializer(serializers.Serializer):
             user.set_unusable_password()
             user.save()
 
-            # Create student profile
             profile = StudentProfile.objects.create(
                 user=user,
                 full_name=validated_data['full_name'],
@@ -61,7 +62,7 @@ class StudentSignupSerializer(serializers.Serializer):
                 level=validated_data['level'],
                 department=validated_data['department'],
                 fingerprint_id=validated_data['fingerprint_id'],
-                totp_secret='',  # Will be set when hardware is ready
+                totp_secret=validated_data.get('totp_secret', '').strip().upper(),
             )
             return profile
 
